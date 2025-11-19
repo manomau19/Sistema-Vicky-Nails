@@ -9,6 +9,8 @@ type DashboardProps = {
   onUpdateService: (id: string, service: Omit<Service, 'id'>) => void;
   onDeleteService: (id: string) => void;
   onAddAppointment: (appointment: Omit<Appointment, 'id'>) => void;
+  onUpdateAppointment: (id: string, appointment: Omit<Appointment, 'id'>) => void;
+  onDeleteAppointment: (id: string) => void;
   onToggleAppointmentAttendance: (id: string) => void;
   onLogout: () => void;
 };
@@ -44,7 +46,9 @@ function generateTimeOptions(): string[] {
 
 function getTodayStr(): string {
   const now = new Date();
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
+    now.getDate(),
+  )}`;
 }
 
 function getCalendarDays(
@@ -69,6 +73,7 @@ function getCalendarDays(
 
   const days: CalendarDay[] = [];
 
+  // Dias do mês anterior
   for (let i = firstWeekday - 1; i >= 0; i--) {
     const dayNumber = prevDays - i;
     const dateStr = `${prevYear}-${pad(prevMonthNum)}-${pad(dayNumber)}`;
@@ -81,6 +86,7 @@ function getCalendarDays(
     });
   }
 
+  // Dias do mês atual
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad(month)}-${pad(d)}`;
     days.push({
@@ -92,6 +98,7 @@ function getCalendarDays(
     });
   }
 
+  // Dias do próximo mês
   let nextDay = 1;
   while (days.length < 42) {
     const dateStr = `${nextYear}-${pad(nextMonthNum)}-${pad(nextDay)}`;
@@ -116,6 +123,8 @@ export function Dashboard({
   onUpdateService,
   onDeleteService,
   onAddAppointment,
+  onUpdateAppointment,
+  onDeleteAppointment,
   onToggleAppointmentAttendance,
   onLogout,
 }: DashboardProps) {
@@ -156,6 +165,7 @@ export function Dashboard({
     [appointments, selectedDate],
   );
 
+  // --- FORM DE AGENDAMENTO (NOVO / EDIÇÃO) ---
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
   const [date, setDate] = useState(selectedDate);
@@ -163,16 +173,31 @@ export function Dashboard({
   const [serviceId, setServiceId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [notes, setNotes] = useState('');
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
 
   useEffect(() => {
-    setDate(selectedDate);
-  }, [selectedDate]);
+    // Quando muda o dia selecionado no calendário, atualiza o campo data (caso não esteja editando)
+    if (!editingAppointmentId) {
+      setDate(selectedDate);
+    }
+  }, [selectedDate, editingAppointmentId]);
 
-  function handleNewAppointment(e: FormEvent) {
+  function resetAppointmentForm() {
+    setClientName('');
+    setPhone('');
+    setDate(selectedDate);
+    setTime('');
+    setServiceId('');
+    setPaymentMethod('');
+    setNotes('');
+    setEditingAppointmentId(null);
+  }
+
+  function handleSubmitAppointment(e: FormEvent) {
     e.preventDefault();
     if (!clientName.trim() || !serviceId || !time || !date) return;
 
-    onAddAppointment({
+    const data: Omit<Appointment, 'id'> = {
       clientName: clientName.trim(),
       phone: phone.trim(),
       date,
@@ -180,19 +205,51 @@ export function Dashboard({
       serviceId,
       paymentMethod: paymentMethod.trim(),
       notes: notes.trim(),
-    });
+    };
 
-    setClientName('');
-    setPhone('');
-    setTime('');
-    setServiceId('');
-    setPaymentMethod('');
-    setNotes('');
+    if (editingAppointmentId) {
+      onUpdateAppointment(editingAppointmentId, data);
+    } else {
+      onAddAppointment(data);
+    }
 
+    resetAppointmentForm();
     setSelectedDate(date);
     setViewMonth(date.substring(0, 7));
   }
 
+  function handleEditAppointment(a: Appointment) {
+    setEditingAppointmentId(a.id);
+    setClientName(a.clientName);
+    setPhone(a.phone);
+    setDate(a.date);
+    setTime(a.time);
+    setServiceId(a.serviceId);
+    setPaymentMethod(a.paymentMethod);
+    setNotes(a.notes);
+
+    const form = document.getElementById('form-agendamento');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function handleDeleteAppointmentClick(id: string) {
+    if (!window.confirm('Deseja realmente excluir este agendamento?')) return;
+    onDeleteAppointment(id);
+    if (editingAppointmentId === id) {
+      resetAppointmentForm();
+    }
+  }
+
+  // --- BLOQUEIO DE HORÁRIOS JÁ SELECIONADOS ---
+  const bookedTimesForFormDate = useMemo(
+    () =>
+      appointments
+        .filter((a) => a.date === date)
+        .map((a) => a.time),
+    [appointments, date],
+  );
+
+  // --- SERVIÇOS (MODAL) ---
   const [serviceName, setServiceName] = useState('');
   const [servicePrice, setServicePrice] = useState('');
   const [serviceDuration, setServiceDuration] = useState('');
@@ -292,8 +349,10 @@ export function Dashboard({
     .split('-')
     .map((v) => Number(v));
 
-  const monthLabel = new Date(viewYearNumber, viewMonthNumber - 1, 1)
-    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(viewYearNumber, viewMonthNumber - 1, 1).toLocaleDateString(
+    'pt-BR',
+    { month: 'long', year: 'numeric' },
+  );
 
   function goMonth(delta: number) {
     const d = new Date(viewYearNumber, viewMonthNumber - 1 + delta, 1);
@@ -336,6 +395,7 @@ export function Dashboard({
         </header>
 
         <main className="dashboard-grid">
+          {/* CARD CALENDÁRIO */}
           <section className="card">
             <div className="card-header">
               <div>
@@ -416,6 +476,7 @@ export function Dashboard({
             </div>
           </section>
 
+          {/* CARD AGENDAMENTOS DO DIA + FORM */}
           <section className="card">
             <div className="card-header">
               <div>
@@ -459,10 +520,26 @@ export function Dashboard({
                       <div className="appointment-actions-row">
                         <button
                           type="button"
+                          className="btn-small"
+                          onClick={() => handleEditAppointment(a)}
+                        >
+                          ✏ Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-small btn-danger"
+                          onClick={() => handleDeleteAppointmentClick(a.id)}
+                        >
+                          🗑 Excluir
+                        </button>
+                        <button
+                          type="button"
                           className={
                             'btn-small ' + (isAttended ? 'btn-small-success' : '')
                           }
-                          onClick={() => onToggleAppointmentAttendance(a.id)}
+                          onClick={() =>
+                            onToggleAppointmentAttendance(a.id)
+                          }
                         >
                           {isAttended
                             ? 'Presença confirmada'
@@ -475,11 +552,12 @@ export function Dashboard({
               </ul>
             )}
 
+            {/* FORMULÁRIO DE AGENDAMENTO */}
             <div className="side-card" id="form-agendamento">
               <h4 className="card-title" style={{ marginTop: 16 }}>
-                Novo agendamento
+                {editingAppointmentId ? 'Editar agendamento' : 'Novo agendamento'}
               </h4>
-              <form onSubmit={handleNewAppointment} className="form-column">
+              <form onSubmit={handleSubmitAppointment} className="form-column">
                 <div className="form-group">
                   <label className="form-label">Nome da cliente</label>
                   <div className="input-wrapper">
@@ -524,11 +602,14 @@ export function Dashboard({
                     onChange={(e) => setTime(e.target.value)}
                   >
                     <option value="">Selecione o horário</option>
-                    {timeOptions.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
+                    {timeOptions.map((t) => {
+                      const isBusy = bookedTimesForFormDate.includes(t);
+                      return (
+                        <option key={t} value={t} disabled={isBusy}>
+                          {t} {isBusy ? '(ocupado)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -575,7 +656,7 @@ export function Dashboard({
                 </div>
 
                 <button type="submit" className="btn-primary">
-                  Salvar agendamento
+                  {editingAppointmentId ? 'Salvar alterações' : 'Salvar agendamento'}
                 </button>
               </form>
             </div>
@@ -583,9 +664,16 @@ export function Dashboard({
         </main>
       </div>
 
+      {/* MODAL DE SERVIÇOS */}
       {showServicesModal && (
-        <div className="modal-backdrop" onClick={() => setShowServicesModal(false)}>
-          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowServicesModal(false)}
+        >
+          <div
+            className="modal-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="modal-header">
               <div>
                 <div className="modal-title">Gerenciar Serviços</div>

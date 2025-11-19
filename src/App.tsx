@@ -25,7 +25,7 @@ export default function App() {
     setLoaded(true);
   }, []);
 
-  // Só salva após ter carregado (evita sobrescrever com vazio ao abrir)
+  // Só salva depois de carregar (evita sobrescrever com vazio)
   useEffect(() => {
     if (loaded) saveUser(user);
   }, [user, loaded]);
@@ -63,13 +63,24 @@ export default function App() {
     setAppointments(prev => [...prev, { ...data, id: crypto.randomUUID() }]);
   }
 
-  function handleToggleAppointmentAttendance(id: string) {
+  function handleUpdateAppointment(id: string, data: Omit<Appointment, 'id'>) {
     setAppointments(prev =>
-      prev.map(a => (a.id === id ? { ...a, attended: !a.attended } : a)),
+      prev.map(a => (a.id === id ? { ...a, ...data } : a)),
     );
   }
 
-  // Evita piscar tela em branco antes de carregar dados
+  function handleDeleteAppointment(id: string) {
+    setAppointments(prev => prev.filter(a => a.id !== id));
+  }
+
+  function handleToggleAppointmentAttendance(id: string) {
+    setAppointments(prev =>
+      prev.map(a =>
+        a.id === id ? { ...a, attended: !a.attended } : a,
+      ),
+    );
+  }
+
   if (!loaded) return null;
 
   if (!user) {
@@ -85,6 +96,8 @@ export default function App() {
       onUpdateService={handleUpdateService}
       onDeleteService={handleDeleteService}
       onAddAppointment={handleAddAppointment}
+      onUpdateAppointment={handleUpdateAppointment}
+      onDeleteAppointment={handleDeleteAppointment}
       onToggleAppointmentAttendance={handleToggleAppointmentAttendance}
       onLogout={handleLogout}
     />
